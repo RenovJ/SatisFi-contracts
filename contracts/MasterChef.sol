@@ -5,16 +5,16 @@ pragma solidity 0.6.12;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./libs/IBEP20.sol";
 import "./libs/SafeBEP20.sol";
-import "./libs/ISailReferral.sol";
+import "./libs/ISatisfiReferral.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import "./SailToken.sol";
+import "./SatisfiToken.sol";
 
-// MasterChef is the master of Sail. He can make Sail and he is a fair guy.
+// MasterChef is the master of Satisfi. He can make Satisfi and he is a fair guy.
 //
 // Note that it's ownable and the owner wields tremendous power. The ownership
-// will be transferred to a governance smart contract once SAIL is sufficiently
+// will be transferred to a governance smart contract once SATISFI is sufficiently
 // distributed and the community can show to govern itself.
 //
 // Have fun reading it. Hopefully it's bug-free. God bless.
@@ -27,13 +27,13 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 amount;         // How many LP tokens the user has provided.
         uint256 rewardDebt;     // Reward debt. See explanation below.
         //
-        // We do some fancy math here. Basically, any point in time, the amount of SAILs
+        // We do some fancy math here. Basically, any point in time, the amount of SATISFIs
         // entitled to a user but is pending to be distributed is:
         //
-        //   pending reward = (user.amount * pool.accSailPerShare) - user.rewardDebt
+        //   pending reward = (user.amount * pool.accSatisfiPerShare) - user.rewardDebt
         //
         // Whenever a user deposits or withdraws LP tokens to a pool. Here's what happens:
-        //   1. The pool's `accSailPerShare` (and `lastRewardBlock`) gets updated.
+        //   1. The pool's `accSatisfiPerShare` (and `lastRewardBlock`) gets updated.
         //   2. User receives the pending reward sent to his/her address.
         //   3. User's `amount` gets updated.
         //   4. User's `rewardDebt` gets updated.
@@ -42,26 +42,26 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Info of each pool.
     struct PoolInfo {
         IBEP20 lpToken;           // Address of LP token contract.
-        uint256 allocPoint;       // How many allocation points assigned to this pool. SAILs to distribute per block.
-        uint256 lastRewardBlock;  // Last block number that SAILs distribution occurs.
-        uint256 accSailPerShare;   // Accumulated SAILs per share, times 1e12. See below.
+        uint256 allocPoint;       // How many allocation points assigned to this pool. SATISFIs to distribute per block.
+        uint256 lastRewardBlock;  // Last block number that SATISFIs distribution occurs.
+        uint256 accSatisfiPerShare;   // Accumulated SATISFIs per share, times 1e12. See below.
         uint16 depositFeeBP;      // Deposit fee in basis points
     }
 
-    // The SAIL TOKEN!
-    SailToken public sail;
+    // The SATISFI TOKEN!
+    SatisfiToken public satisfi;
     // Dev address.
     address public devAddress;
     // Deposit Fee address
     address public feeAddress;
-    // SAIL tokens created per block.
-    uint256 public sailPerBlock;
-    // Bonus muliplier for early sail makers.
+    // SATISFI tokens created per block.
+    uint256 public satisfiPerBlock;
+    // Bonus muliplier for early satisfi makers.
     uint256 public constant BONUS_MULTIPLIER = 1;
 
-    // Initial emission rate: 1 SAIL per block.
+    // Initial emission rate: 1 SATISFI per block.
     uint256 public constant INITIAL_EMISSION_RATE = 1 ether;
-    // Minimum emission rate: 0.1 SAIL per block.
+    // Minimum emission rate: 0.1 SATISFI per block.
     uint256 public constant MINIMUM_EMISSION_RATE = 100 finney;
     // Reduce emission every 9,600 blocks ~ 8 hours.
     uint256 public constant EMISSION_REDUCTION_PERIOD_BLOCKS = 9600;
@@ -76,11 +76,11 @@ contract MasterChef is Ownable, ReentrancyGuard {
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
     // Total allocation points. Must be the sum of all allocation points in all pools.
     uint256 public totalAllocPoint = 0;
-    // The block number when SAIL mining starts.
+    // The block number when SATISFI mining starts.
     uint256 public startBlock;
 
-    // Sail referral contract address.
-    ISailReferral public sailReferral;
+    // Satisfi referral contract address.
+    ISatisfiReferral public satisfiReferral;
     // Referral commission rate in basis points.
     uint16 public referralCommissionRate = 200;
     // Max referral commission rate: 20%.
@@ -93,15 +93,15 @@ contract MasterChef is Ownable, ReentrancyGuard {
     event ReferralCommissionPaid(address indexed user, address indexed referrer, uint256 commissionAmount);
 
     constructor(
-        SailToken _sail,
+        SatisfiToken _satisfi,
         uint256 _startBlock
     ) public {
-        sail = _sail;
+        satisfi = _satisfi;
         startBlock = _startBlock;
 
         devAddress = msg.sender;
         feeAddress = msg.sender;
-        sailPerBlock = INITIAL_EMISSION_RATE;
+        satisfiPerBlock = INITIAL_EMISSION_RATE;
     }
 
     function poolLength() external view returns (uint256) {
@@ -121,12 +121,12 @@ contract MasterChef is Ownable, ReentrancyGuard {
             lpToken: _lpToken,
             allocPoint: _allocPoint,
             lastRewardBlock: lastRewardBlock,
-            accSailPerShare: 0,
+            accSatisfiPerShare: 0,
             depositFeeBP: _depositFeeBP
         }));
     }
 
-    // Update the given pool's SAIL allocation point and deposit fee. Can only be called by the owner.
+    // Update the given pool's SATISFI allocation point and deposit fee. Can only be called by the owner.
     function set(uint256 _pid, uint256 _allocPoint, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner {
         require(_depositFeeBP <= 10000, "set: invalid deposit fee basis points");
         if (_withUpdate) {
@@ -142,18 +142,18 @@ contract MasterChef is Ownable, ReentrancyGuard {
         return _to.sub(_from).mul(BONUS_MULTIPLIER);
     }
 
-    // View function to see pending SAILs on frontend.
-    function pendingSail(uint256 _pid, address _user) external view returns (uint256) {
+    // View function to see pending SATISFIs on frontend.
+    function pendingSatisfi(uint256 _pid, address _user) external view returns (uint256) {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
-        uint256 accSailPerShare = pool.accSailPerShare;
+        uint256 accSatisfiPerShare = pool.accSatisfiPerShare;
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
             uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-            uint256 sailReward = multiplier.mul(sailPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-            accSailPerShare = accSailPerShare.add(sailReward.mul(1e12).div(lpSupply));
+            uint256 satisfiReward = multiplier.mul(satisfiPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
+            accSatisfiPerShare = accSatisfiPerShare.add(satisfiReward.mul(1e12).div(lpSupply));
         }
-        return user.amount.mul(accSailPerShare).div(1e12).sub(user.rewardDebt);
+        return user.amount.mul(accSatisfiPerShare).div(1e12).sub(user.rewardDebt);
     }
 
     // Update reward variables for all pools. Be careful of gas spending!
@@ -176,31 +176,31 @@ contract MasterChef is Ownable, ReentrancyGuard {
             return;
         }
         uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-        uint256 sailReward = multiplier.mul(sailPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-        sail.mint(devAddress, sailReward.div(10));
-        sail.mint(address(this), sailReward);
-        pool.accSailPerShare = pool.accSailPerShare.add(sailReward.mul(1e12).div(lpSupply));
+        uint256 satisfiReward = multiplier.mul(satisfiPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
+        satisfi.mint(devAddress, satisfiReward.div(10));
+        satisfi.mint(address(this), satisfiReward);
+        pool.accSatisfiPerShare = pool.accSatisfiPerShare.add(satisfiReward.mul(1e12).div(lpSupply));
         pool.lastRewardBlock = block.number;
     }
 
-    // Deposit LP tokens to MasterChef for SAIL allocation.
+    // Deposit LP tokens to MasterChef for SATISFI allocation.
     function deposit(uint256 _pid, uint256 _amount, address _referrer) public nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
-        if (_amount > 0 && address(sailReferral) != address(0) && _referrer != address(0) && _referrer != msg.sender) {
-            sailReferral.recordReferral(msg.sender, _referrer);
+        if (_amount > 0 && address(satisfiReferral) != address(0) && _referrer != address(0) && _referrer != msg.sender) {
+            satisfiReferral.recordReferral(msg.sender, _referrer);
         }
         if (user.amount > 0) {
-            uint256 pending = user.amount.mul(pool.accSailPerShare).div(1e12).sub(user.rewardDebt);
+            uint256 pending = user.amount.mul(pool.accSatisfiPerShare).div(1e12).sub(user.rewardDebt);
             if (pending > 0) {
-                safeSailTransfer(msg.sender, pending);
+                safeSatisfiTransfer(msg.sender, pending);
                 payReferralCommission(msg.sender, pending);
             }
         }
         if (_amount > 0) {
             pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
-            if (address(pool.lpToken) == address(sail)) {
+            if (address(pool.lpToken) == address(satisfi)) {
                 uint256 transferTax = _amount.mul(2).div(100);
                 _amount = _amount.sub(transferTax);
             }
@@ -212,7 +212,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
                 user.amount = user.amount.add(_amount);
             }
         }
-        user.rewardDebt = user.amount.mul(pool.accSailPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accSatisfiPerShare).div(1e12);
         emit Deposit(msg.sender, _pid, _amount);
     }
 
@@ -222,16 +222,16 @@ contract MasterChef is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
         updatePool(_pid);
-        uint256 pending = user.amount.mul(pool.accSailPerShare).div(1e12).sub(user.rewardDebt);
+        uint256 pending = user.amount.mul(pool.accSatisfiPerShare).div(1e12).sub(user.rewardDebt);
         if (pending > 0) {
-            safeSailTransfer(msg.sender, pending);
+            safeSatisfiTransfer(msg.sender, pending);
             payReferralCommission(msg.sender, pending);
         }
         if (_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
         }
-        user.rewardDebt = user.amount.mul(pool.accSailPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accSatisfiPerShare).div(1e12);
         emit Withdraw(msg.sender, _pid, _amount);
     }
 
@@ -246,16 +246,16 @@ contract MasterChef is Ownable, ReentrancyGuard {
         emit EmergencyWithdraw(msg.sender, _pid, amount);
     }
 
-    // Safe sail transfer function, just in case if rounding error causes pool to not have enough SAILs.
-    function safeSailTransfer(address _to, uint256 _amount) internal {
-        uint256 sailBal = sail.balanceOf(address(this));
+    // Safe satisfi transfer function, just in case if rounding error causes pool to not have enough SATISFIs.
+    function safeSatisfiTransfer(address _to, uint256 _amount) internal {
+        uint256 satisfiBal = satisfi.balanceOf(address(this));
         bool transferSuccess = false;
-        if (_amount > sailBal) {
-            transferSuccess = sail.transfer(_to, sailBal);
+        if (_amount > satisfiBal) {
+            transferSuccess = satisfi.transfer(_to, satisfiBal);
         } else {
-            transferSuccess = sail.transfer(_to, _amount);
+            transferSuccess = satisfi.transfer(_to, _amount);
         }
-        require(transferSuccess, "safeSailTransfer: Transfer failed");
+        require(transferSuccess, "safeSatisfiTransfer: Transfer failed");
     }
 
     // Update dev address by the previous dev.
@@ -272,33 +272,33 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Reduce emission rate by 3% every 9,600 blocks ~ 8hours. This function can be called publicly.
     function updateEmissionRate() public {
         require(block.number > startBlock, "updateEmissionRate: Can only be called after mining starts");
-        require(sailPerBlock > MINIMUM_EMISSION_RATE, "updateEmissionRate: Emission rate has reached the minimum threshold");
+        require(satisfiPerBlock > MINIMUM_EMISSION_RATE, "updateEmissionRate: Emission rate has reached the minimum threshold");
 
         uint256 currentIndex = block.number.sub(startBlock).div(EMISSION_REDUCTION_PERIOD_BLOCKS);
         if (currentIndex <= lastReductionPeriodIndex) {
             return;
         }
 
-        uint256 newEmissionRate = sailPerBlock;
+        uint256 newEmissionRate = satisfiPerBlock;
         for (uint256 index = lastReductionPeriodIndex; index < currentIndex; ++index) {
             newEmissionRate = newEmissionRate.mul(1e4 - EMISSION_REDUCTION_RATE_PER_PERIOD).div(1e4);
         }
 
         newEmissionRate = newEmissionRate < MINIMUM_EMISSION_RATE ? MINIMUM_EMISSION_RATE : newEmissionRate;
-        if (newEmissionRate >= sailPerBlock) {
+        if (newEmissionRate >= satisfiPerBlock) {
             return;
         }
 
         massUpdatePools();
         lastReductionPeriodIndex = currentIndex;
-        uint256 previousEmissionRate = sailPerBlock;
-        sailPerBlock = newEmissionRate;
+        uint256 previousEmissionRate = satisfiPerBlock;
+        satisfiPerBlock = newEmissionRate;
         emit EmissionRateUpdated(msg.sender, previousEmissionRate, newEmissionRate);
     }
 
-    // Update the sail referral contract address by the owner
-    function setSailReferral(ISailReferral _sailReferral) public onlyOwner {
-        sailReferral = _sailReferral;
+    // Update the satisfi referral contract address by the owner
+    function setSatisfiReferral(ISatisfiReferral _satisfiReferral) public onlyOwner {
+        satisfiReferral = _satisfiReferral;
     }
 
     // Update referral commission rate by the owner
@@ -309,12 +309,12 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     // Pay referral commission to the referrer who referred this user.
     function payReferralCommission(address _user, uint256 _pending) internal {
-        if (address(sailReferral) != address(0) && referralCommissionRate > 0) {
-            address referrer = sailReferral.getReferrer(_user);
+        if (address(satisfiReferral) != address(0) && referralCommissionRate > 0) {
+            address referrer = satisfiReferral.getReferrer(_user);
             uint256 commissionAmount = _pending.mul(referralCommissionRate).div(10000);
 
             if (referrer != address(0) && commissionAmount > 0) {
-                sail.mint(referrer, commissionAmount);
+                satisfi.mint(referrer, commissionAmount);
                 emit ReferralCommissionPaid(_user, referrer, commissionAmount);
             }
         }

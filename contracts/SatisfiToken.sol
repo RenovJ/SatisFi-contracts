@@ -4,8 +4,8 @@ pragma solidity 0.6.12;
 
 import "./libs/BEP20.sol";
 
-// SailToken with Governance.
-contract SailToken is BEP20("FullSail Finance Token", "SAIL") {
+// SatisfiToken with Governance.
+contract SatisfiToken is BEP20("Satisfi Token", "SAT") {
     // Burn address
     address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
@@ -15,7 +15,7 @@ contract SailToken is BEP20("FullSail Finance Token", "SAIL") {
         _moveDelegates(address(0), _delegates[_to], _amount);
     }
 
-    /// @dev overrides transfer function to meet tokenomics of SAIL
+    /// @dev overrides transfer function to meet tokenomics of SATISFI
     function _transfer(address sender, address recipient, uint256 amount) internal virtual override {
         if (recipient == BURN_ADDRESS) {
             super._transfer(sender, recipient, amount);
@@ -24,7 +24,7 @@ contract SailToken is BEP20("FullSail Finance Token", "SAIL") {
             uint256 burnAmount = amount.mul(2).div(100);
             // 98% of transfer sent to recipient
             uint256 sendAmount = amount.sub(burnAmount);
-            require(amount == sendAmount + burnAmount, "SAIL::transfer: Burn value invalid");
+            require(amount == sendAmount + burnAmount, "SATISFI::transfer: Burn value invalid");
 
             super._transfer(sender, BURN_ADDRESS, burnAmount);
             super._transfer(sender, recipient, sendAmount);
@@ -134,9 +134,9 @@ contract SailToken is BEP20("FullSail Finance Token", "SAIL") {
         );
 
         address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "SAIL::delegateBySig: invalid signature");
-        require(nonce == nonces[signatory]++, "SAIL::delegateBySig: invalid nonce");
-        require(now <= expiry, "SAIL::delegateBySig: signature expired");
+        require(signatory != address(0), "SATISFI::delegateBySig: invalid signature");
+        require(nonce == nonces[signatory]++, "SATISFI::delegateBySig: invalid nonce");
+        require(now <= expiry, "SATISFI::delegateBySig: signature expired");
         return _delegate(signatory, delegatee);
     }
 
@@ -166,7 +166,7 @@ contract SailToken is BEP20("FullSail Finance Token", "SAIL") {
         view
         returns (uint256)
     {
-        require(blockNumber < block.number, "SAIL::getPriorVotes: not yet determined");
+        require(blockNumber < block.number, "SATISFI::getPriorVotes: not yet determined");
 
         uint32 nCheckpoints = numCheckpoints[account];
         if (nCheckpoints == 0) {
@@ -203,7 +203,7 @@ contract SailToken is BEP20("FullSail Finance Token", "SAIL") {
         internal
     {
         address currentDelegate = _delegates[delegator];
-        uint256 delegatorBalance = balanceOf(delegator); // balance of underlying SAILs (not scaled);
+        uint256 delegatorBalance = balanceOf(delegator); // balance of underlying SATISFIs (not scaled);
         _delegates[delegator] = delegatee;
 
         emit DelegateChanged(delegator, currentDelegate, delegatee);
@@ -239,7 +239,7 @@ contract SailToken is BEP20("FullSail Finance Token", "SAIL") {
     )
         internal
     {
-        uint32 blockNumber = safe32(block.number, "SAIL::_writeCheckpoint: block number exceeds 32 bits");
+        uint32 blockNumber = safe32(block.number, "SATISFI::_writeCheckpoint: block number exceeds 32 bits");
 
         if (nCheckpoints > 0 && checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber) {
             checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
