@@ -2,12 +2,12 @@
 
 pragma solidity 0.6.12;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "./libs/IBEP20.sol";
-import "./libs/SafeBEP20.sol";
-import "./libs/ISatisfiReferral.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./openzeppelin_math_SafeMath.sol";
+import "./IBEP20.sol";
+import "./SafeBEP20.sol";
+import "./ISatisfiReferral.sol";
+import "./openzeppelin_access_Ownable.sol";
+import "./openzeppelin_utils_ReentrancyGuard.sol";
 
 import "./SatisfiToken.sol";
 

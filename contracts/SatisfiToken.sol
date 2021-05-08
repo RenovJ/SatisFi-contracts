@@ -2,7 +2,7 @@
 
 pragma solidity 0.6.12;
 
-import "./libs/BEP20.sol";
+import "./BEP20.sol";
 
 // SatisfiToken with Governance.
 contract SatisfiToken is BEP20("Satisfi Token", "SAT") {
