@@ -1573,7 +1573,9 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
 
         IERC20(wantAddress).safeTransfer(YetiMasterAddress, _wantAmt);
         
-        distributeFee();
+        if (isSatisfiComp) {
+            distributeFee();
+        }
 
         return _wantAmt;
     }
@@ -1596,6 +1598,8 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     }
     
     function distributeFee() internal {
+        require(isSatisfiComp, "!isSatisfiComp");
+        
         // Converts farm tokens into want tokens
         uint256 earnedAmt = IERC20(earnedAddress).balanceOf(address(this));
 

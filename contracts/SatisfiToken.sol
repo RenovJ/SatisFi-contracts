@@ -4,7 +4,7 @@ pragma solidity 0.6.12;
 
 import "./BEP20.sol";
 
-contract SatisfiToken is BEP20("Satisfi Token v2", "SAT2") {
+contract SatisfiToken is BEP20("Satisfi Token v2", "xSAT") {
     // Burn address
     address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
