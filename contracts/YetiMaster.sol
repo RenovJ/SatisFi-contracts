@@ -81,7 +81,7 @@ interface IERC20 {
 
 // File: @openzeppelin/contracts/math/SafeMath.sol
 
-// SPDX-License-Identifier: MIT
+
 
 pragma solidity >=0.6.0 <0.8.0;
 
@@ -298,7 +298,7 @@ library SafeMath {
 
 // File: @openzeppelin/contracts/utils/Address.sol
 
-// SPDX-License-Identifier: MIT
+
 
 pragma solidity >=0.6.2 <0.8.0;
 
@@ -490,7 +490,7 @@ library Address {
 
 // File: @openzeppelin/contracts/token/ERC20/SafeERC20.sol
 
-// SPDX-License-Identifier: MIT
+
 
 pragma solidity >=0.6.0 <0.8.0;
 
@@ -567,7 +567,7 @@ library SafeERC20 {
 
 // File: @openzeppelin/contracts/utils/Context.sol
 
-// SPDX-License-Identifier: MIT
+
 
 pragma solidity >=0.6.0 <0.8.0;
 
@@ -594,7 +594,7 @@ abstract contract Context {
 
 // File: @openzeppelin/contracts/access/Ownable.sol
 
-// SPDX-License-Identifier: MIT
+
 
 pragma solidity >=0.6.0 <0.8.0;
 
@@ -664,7 +664,7 @@ abstract contract Ownable is Context {
 
 // File: @openzeppelin/contracts/utils/ReentrancyGuard.sol
 
-// SPDX-License-Identifier: MIT
+
 
 pragma solidity >=0.6.0 <0.8.0;
 
@@ -729,7 +729,7 @@ abstract contract ReentrancyGuard {
 
 // File: @openzeppelin/contracts/token/ERC20/ERC20.sol
 
-// SPDX-License-Identifier: MIT
+
 
 pragma solidity >=0.6.0 <0.8.0;
 
@@ -1037,7 +1037,7 @@ contract ERC20 is Context, IERC20 {
 
 // File: contracts/interfaces/IStrategy.sol
 
-// SPDX-License-Identifier: MIT
+
 pragma solidity 0.6.12;
 
 // For interacting with our own strategy
@@ -1065,13 +1065,29 @@ interface IStrategy {
     ) external;
 }
 
-// File: contracts/SatisfiToken.sol
+// File: contracts/ISatisfiReferral.sol
 
-// SPDX-License-Identifier: MIT
+
 
 pragma solidity 0.6.12;
 
+interface ISatisfiReferral {
+    /**
+     * @dev Record referral.
+     */
+    function recordReferral(address user, address referrer) external;
 
+    /**
+     * @dev Get the referrer address that referred the user.
+     */
+    function getReferrer(address user) external view returns (address);
+}
+
+// File: contracts/SatisfiToken.sol
+
+
+
+pragma solidity 0.6.12;
 
 
 // SatisfiToken with Governance.
@@ -1084,16 +1100,9 @@ contract SatisfiToken is ERC20("Satisfi Token", "Satisfi"), Ownable {
 
 // File: contracts/YetiMaster.sol
 
-// SPDX-License-Identifier: MIT
+
 
 pragma solidity 0.6.12;
-
-
-
-
-
-
-
 
 contract YetiMaster is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
@@ -1126,21 +1135,28 @@ contract YetiMaster is Ownable, ReentrancyGuard {
     }
 
     // Satisfi
-    address public Satisfi = 0xA1928c0D8F83C0bFB7ebE51B412b1FD29A277893;
+    address public oldSatisfiToken = 0xA1928c0D8F83C0bFB7ebE51B412b1FD29A277893;
+    address public newSatisfiToken = 0xD3bb08Ca48AEC4FCe83F70120AD9e1Df81e17AD1;
 
      // Dev address.
     address public devaddr;
 
     address public burnAddress = 0x000000000000000000000000000000000000dEaD;
 
-    address public feeAddBb = 0xe3B8fBe43c6c0db1B1797090633B0f47777d7fc3;
-    address public feeAddSt = 0x1708AC45a64DEc6ff4F0689556CE69b838300Fb7;
+    address public feeAddr;
 
     address public wbnb = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-    uint256 public SatisfiPerBlock = 0.912 ether;
-    uint256 public SatisfiDevPerBlock =  0.088 ether;
+    uint256 public SatisfiPerBlock = 0.1 ether;
+    uint256 public SatisfiDevPerBlock =  0.00909 ether;
     uint256 public startBlock;
     uint256 public noFeeBlock; // No fee until Block
+    
+    // Satisfi referral contract address.
+    ISatisfiReferral public satisfiReferral;
+    // Referral commission rate in basis points.
+    uint16 public referralCommissionRate = 200;
+    // Max referral commission rate: 20%.
+    uint16 public constant MAXIMUM_REFERRAL_COMMISSION_RATE = 2000;
 
     PoolInfo[] public poolInfo; // Info of each pool.
     mapping(uint256 => mapping(address => UserInfo)) public userInfo; // Info of each user that stakes LP tokens.
@@ -1154,9 +1170,9 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         uint256 amount
     );
     event MigrateToV2(address indexed user,uint256 amount);
-    event SetFeeAddressBb(address indexed user, address indexed newAddress);
-    event SetFeeAddressSt(address indexed user, address indexed newAddress);
+    event SetFeeAddress(address indexed user, address indexed newAddress);
     event SetDevAddress(address indexed user, address indexed newAddress);
+    event ReferralCommissionPaid(address indexed user, address indexed referrer, uint256 commissionAmount);
 
     function poolLength() external view returns (uint256) {
         return poolInfo.length;
@@ -1281,14 +1297,14 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         }
         uint256 SatisfiReward =  multiplier.mul(SatisfiPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
 
-        SatisfiToken(Satisfi).mint(
+        SatisfiToken(newSatisfiToken).mint(
             devaddr,
             multiplier.mul(SatisfiDevPerBlock).mul(pool.allocPoint).div(
                 totalAllocPoint
             )
         );
 
-        SatisfiToken(Satisfi).mint(
+        SatisfiToken(newSatisfiToken).mint(
             address(this),
             SatisfiReward
         );
@@ -1299,11 +1315,14 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         pool.lastRewardBlock = block.number;
     }
 
-    function deposit(uint256 _pid,uint256 _wantAmt) public nonReentrant poolExists(_pid){
+    function deposit(uint256 _pid,uint256 _wantAmt, address _referrer) public nonReentrant poolExists(_pid){
         updatePool(_pid);
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
 
+        if (_wantAmt > 0 && address(satisfiReferral) != address(0) && _referrer != address(0) && _referrer != msg.sender) {
+            satisfiReferral.recordReferral(msg.sender, _referrer);
+        }
         if (user.amount > 0) {
             uint256 pending =
                 user.amount.mul(pool.accSatisfiPerShare).div(1e12).sub(
@@ -1311,6 +1330,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
                 );
             if (pending > 0) {
                 safeSatisfiTransfer(msg.sender, pending);
+                payReferralCommission(msg.sender, pending);
             }
         }
         if (_wantAmt > 0) {
@@ -1318,9 +1338,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
             uint256 amount = _wantAmt;
             if (pool.depositFeeBP > 0 && block.number > noFeeBlock) {
                 uint256 depositFee = _wantAmt.mul(pool.depositFeeBP).div(10000);
-                uint256 depositeFeeHalf = depositFee.div(2);
-                pool.want.safeTransfer(feeAddBb, depositeFeeHalf);
-                pool.want.safeTransfer(feeAddSt, depositFee.sub(depositeFeeHalf));
+                pool.want.safeTransfer(feeAddr, depositFee);
                 amount = (_wantAmt).sub(depositFee);
             }
             pool.want.safeIncreaseAllowance(pool.strat, amount);
@@ -1352,6 +1370,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
 
         if (pending > 0) {
             safeSatisfiTransfer(msg.sender, pending);
+            payReferralCommission(msg.sender, pending);
         }
 
         // Withdraw want tokens
@@ -1396,11 +1415,11 @@ contract YetiMaster is Ownable, ReentrancyGuard {
 
     // Safe Satisfi transfer function, just in case if rounding error causes pool to not have enough
     function safeSatisfiTransfer(address _to, uint256 _SatisfiAmt) internal {
-        uint256 SatisfiBal = IERC20(Satisfi).balanceOf(address(this));
+        uint256 SatisfiBal = IERC20(newSatisfiToken).balanceOf(address(this));
         if (_SatisfiAmt > SatisfiBal) {
-            IERC20(Satisfi).transfer(_to, SatisfiBal);
+            IERC20(newSatisfiToken).transfer(_to, SatisfiBal);
         } else {
-            IERC20(Satisfi).transfer(_to, _SatisfiAmt);
+            IERC20(newSatisfiToken).transfer(_to, _SatisfiAmt);
         }
     }
 
@@ -1408,26 +1427,57 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         public
         onlyOwner
     {
-        require(_token != Satisfi, "!safe");
+        require(_token != newSatisfiToken, "!safe");
         IERC20(_token).safeTransfer(msg.sender, _amount);
     }
 
-      // Update dev address by the previous dev.
-    function dev(address _devaddr) public {
-        require(msg.sender == devaddr, "dev: wut?");
+    function setDevAddress(address _devaddr) public onlyOwner {
         devaddr = _devaddr;
         emit SetDevAddress(msg.sender, _devaddr);
     }
 
-    function setFeeAddressBb(address _feeAddress) public {
-        require(msg.sender == feeAddBb, "setFeeAddress: FORBIDDEN");
-        feeAddBb = _feeAddress;
-        emit SetFeeAddressBb(msg.sender, _feeAddress);
+    function setFeeAddress(address _feeAddress) public onlyOwner {
+        feeAddr = _feeAddress;
+        emit SetFeeAddress(msg.sender, _feeAddress);
+    }
+    
+    // Update the satisfi referral contract address by the owner
+    function setSatisfiReferral(ISatisfiReferral _satisfiReferral) public onlyOwner {
+        satisfiReferral = _satisfiReferral;
     }
 
-    function setFeeAddressSt(address _feeAddress) public {
-        require(msg.sender == feeAddSt, "setFeeAddress: FORBIDDEN");
-        feeAddSt = _feeAddress;
-        emit SetFeeAddressSt(msg.sender, _feeAddress);
+    // Update referral commission rate by the owner
+    function setReferralCommissionRate(uint16 _referralCommissionRate) public onlyOwner {
+        require(_referralCommissionRate <= MAXIMUM_REFERRAL_COMMISSION_RATE, "setReferralCommissionRate: invalid referral commission rate basis points");
+        referralCommissionRate = _referralCommissionRate;
     }
+
+    // Pay referral commission to the referrer who referred this user.
+    function payReferralCommission(address _user, uint256 _pending) internal {
+        if (address(satisfiReferral) != address(0) && referralCommissionRate > 0) {
+            address referrer = satisfiReferral.getReferrer(_user);
+            uint256 commissionAmount = _pending.mul(referralCommissionRate).div(10000);
+
+            if (referrer != address(0) && commissionAmount > 0) {
+                SatisfiToken(newSatisfiToken).mint(referrer, commissionAmount);
+                emit ReferralCommissionPaid(_user, referrer, commissionAmount);
+            }
+        }
+    }
+    
+    function migrateSatisfiToken(uint256 _SatisfiAmt) public nonReentrant {
+        require(_SatisfiAmt > 0, "old Satisfi token amount must be larger than 0");
+        IERC20(oldSatisfiToken).safeTransferFrom(address(msg.sender), burnAddress, _SatisfiAmt);
+        uint256 newSatisfiAmt = _SatisfiAmt.mul(104).div(100);
+        SatisfiToken(newSatisfiToken).mint(
+          address(msg.sender),
+          newSatisfiAmt
+        );
+    }
+    
+    function transferSatisfiTokenOwnership(address newOwner) public onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        Ownable(newSatisfiToken).transferOwnership(newOwner);
+    }
+    
 }

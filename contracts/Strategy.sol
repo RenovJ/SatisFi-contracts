@@ -1466,19 +1466,14 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     address public token0Address;
     address public token1Address;
     address public earnedAddress;
-    address public uniRouterAddress; // uniswap, pancakeswap etc
 
     address public constant wbnbAddress = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address public YetiMasterAddress;
-    address public SatisfiAddress;
-    address public govAddress; // timelock contract
-    bool public onlyGov = false;
+    address public govAddress;
+    address public feeAddress;
 
     uint256 public lastEarnBlock = 0;
     uint256 public wantLockedTotal = 0;
-
-    uint256 public controllerFee = 50; // 0.5 %
-    uint256 public constant controllerFeeMax = 10000; // 100 = 1%
 
     address public constant buyBackAddress =
         0x000000000000000000000000000000000000dEaD;
@@ -1487,18 +1482,16 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
 
     constructor(
         address _YetiMasterAddress,
-        address _SatisfiAddress,
         bool _isCAKEStaking,
         bool _isSatisfiComp,
         address _farmContractAddress,
         uint256 _pid,
         address _wantAddress,
-        address _earnedAddress,
-        address _uniRouterAddress
+        address _earnedAddress
     ) public {
         govAddress = msg.sender;
+        feeAddress = msg.sender;
         YetiMasterAddress = _YetiMasterAddress;
-        SatisfiAddress = _SatisfiAddress;
 
         isCAKEStaking = _isCAKEStaking;
         isSatisfiComp = _isSatisfiComp;
@@ -1513,13 +1506,6 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
             farmContractAddress = _farmContractAddress;
             pid = _pid;
             earnedAddress = _earnedAddress;
-
-            uniRouterAddress = _uniRouterAddress;
-
-            earnedToSatisfiPath = [earnedAddress, wbnbAddress, SatisfiAddress];
-            if (wbnbAddress == earnedAddress) {
-                earnedToSatisfiPath = [wbnbAddress, SatisfiAddress];
-            }
         }
 
         transferOwnership(YetiMasterAddress);
@@ -1586,6 +1572,8 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
         wantLockedTotal = wantLockedTotal.sub(_wantAmt);
 
         IERC20(wantAddress).safeTransfer(YetiMasterAddress, _wantAmt);
+        
+        distributeFee();
 
         return _wantAmt;
     }
@@ -1596,9 +1584,6 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
 
     function earn() public whenNotPaused {
         require(isSatisfiComp, "!isSatisfiComp");
-        if (onlyGov) {
-            require(msg.sender == govAddress, "Not authorised");
-        }
 
         // Harvest farm tokens
         if (isCAKEStaking) {
@@ -1606,46 +1591,17 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
         } else {
             IPancakeswapFarm(farmContractAddress).withdraw(pid, 0);
         }
-
+        
+        distributeFee();
+    }
+    
+    function distributeFee() internal {
         // Converts farm tokens into want tokens
         uint256 earnedAmt = IERC20(earnedAddress).balanceOf(address(this));
 
-        earnedAmt = distributeFees(earnedAmt);
-        buyBackAndBurn(earnedAmt);
+        IERC20(earnedAddress).safeTransfer(feeAddress, earnedAmt);
 
         lastEarnBlock = block.number;
-    }
-
-
-    function distributeFees(uint256 _earnedAmt) internal returns (uint256) {
-        if (_earnedAmt > 0) {
-            // Performance fee
-            if (controllerFee > 0) {
-                uint256 fee =
-                    _earnedAmt.mul(controllerFee).div(controllerFeeMax);
-                IERC20(earnedAddress).safeTransfer(govAddress, fee);
-                _earnedAmt = _earnedAmt.sub(fee);
-            }
-        }
-
-        return _earnedAmt;
-    }
-
-    function buyBackAndBurn(uint256 _buyBackAmt) internal {
-
-        IERC20(earnedAddress).safeIncreaseAllowance(
-            uniRouterAddress,
-            _buyBackAmt
-        );
-
-        IPancakeRouter02(uniRouterAddress)
-            .swapExactTokensForTokensSupportingFeeOnTransferTokens(
-            _buyBackAmt,
-            0,
-            earnedToSatisfiPath,
-            buyBackAddress,
-            now + 600
-        );
     }
 
     function pause() public {
@@ -1663,9 +1619,9 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
         govAddress = _govAddress;
     }
 
-    function setOnlyGov(bool _onlyGov) public {
+    function setFeeAddress(address _feeAddress) public {
         require(msg.sender == govAddress, "!gov");
-        onlyGov = _onlyGov;
+        feeAddress = _feeAddress;
     }
 
     function inCaseTokensGetStuck(
