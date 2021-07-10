@@ -5,9 +5,9 @@
 
 pragma solidity >=0.6.0 <0.8.0;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.0/contracts/math/SafeMath.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.0/contracts/access/Ownable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.0/contracts/utils/ReentrancyGuard.sol";
+import "./openzeppelin_math_SafeMath.sol";
+import "./openzeppelin_access_Ownable.sol";
+import "./openzeppelin_utils_ReentrancyGuard.sol";
 import "./IBEP20.sol";
 import "./SafeBEP20.sol";
 import "./ISatisfiReferral.sol";

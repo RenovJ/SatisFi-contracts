@@ -1458,7 +1458,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     bool public isCAKEStaking; // only for staking CAKE using pancakeswap's native CAKE staking contract.
-    bool public isSatisfiComp; // this vault is purely for staking. eg. WBNB-Satisfi staking vault.
+    bool public isLazymintComp; // this vault is purely for staking. eg. WBNB-Lazymint staking vault.
 
     address public farmContractAddress; // address of farm, eg, PCS, Thugs etc.
     uint256 public pid; // pid of pool in farmContractAddress
@@ -1478,12 +1478,12 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     address public constant buyBackAddress =
         0x000000000000000000000000000000000000dEaD;
 
-    address[] public earnedToSatisfiPath;
+    address[] public earnedToLazymintPath;
 
     constructor(
         address _YetiMasterAddress,
         bool _isCAKEStaking,
-        bool _isSatisfiComp,
+        bool _isLazymintComp,
         address _farmContractAddress,
         uint256 _pid,
         address _wantAddress,
@@ -1494,10 +1494,10 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
         YetiMasterAddress = _YetiMasterAddress;
 
         isCAKEStaking = _isCAKEStaking;
-        isSatisfiComp = _isSatisfiComp;
+        isLazymintComp = _isLazymintComp;
         wantAddress = _wantAddress;
 
-        if (isSatisfiComp) {
+        if (isLazymintComp) {
             if (!isCAKEStaking) {
                 token0Address = IUniswapV2Pair(wantAddress).token0();
                 token1Address = IUniswapV2Pair(wantAddress).token1();
@@ -1524,7 +1524,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
             _wantAmt
         );
 
-        if (isSatisfiComp) {
+        if (isLazymintComp) {
             _farm(_wantAmt);
         } else {
             wantLockedTotal = wantLockedTotal.add(_wantAmt);
@@ -1552,7 +1552,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     {
         require(_wantAmt > 0, "_wantAmt <= 0");
 
-        if (isSatisfiComp) {
+        if (isLazymintComp) {
             if (isCAKEStaking) {
                 IPancakeswapFarm(farmContractAddress).leaveStaking(_wantAmt); // Just for CAKE staking, we dont use withdraw()
             } else {
@@ -1573,7 +1573,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
 
         IERC20(wantAddress).safeTransfer(YetiMasterAddress, _wantAmt);
         
-        if (isSatisfiComp) {
+        if (isLazymintComp) {
             distributeFee();
         }
 
@@ -1585,7 +1585,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     // 3. Deposits want tokens
 
     function earn() public whenNotPaused {
-        require(isSatisfiComp, "!isSatisfiComp");
+        require(isLazymintComp, "!isLazymintComp");
 
         // Harvest farm tokens
         if (isCAKEStaking) {
@@ -1598,7 +1598,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     }
     
     function distributeFee() internal {
-        require(isSatisfiComp, "!isSatisfiComp");
+        require(isLazymintComp, "!isLazymintComp");
         
         // Converts farm tokens into want tokens
         uint256 earnedAmt = IERC20(earnedAddress).balanceOf(address(this));
