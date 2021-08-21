@@ -5,13 +5,13 @@
 
 pragma solidity >=0.6.0 <0.8.0;
 
-import "./openzeppelin_math_SafeMath.sol";
-import "./openzeppelin_access_Ownable.sol";
-import "./openzeppelin_utils_ReentrancyGuard.sol";
-import "./IBEP20.sol";
-import "./SafeBEP20.sol";
-import "./ISatisfiReferral.sol";
-import "./SatisfiToken.sol";
+// file "./openzeppelin_math_SafeMath.sol";
+// file "./openzeppelin_access_Ownable.sol";
+// file "./openzeppelin_utils_ReentrancyGuard.sol";
+// file "./IBEP20.sol";
+// file "./SafeBEP20.sol";
+// file "./ISatisfiReferral.sol";
+// file "./SatisfiToken.sol";
 
 // File: contracts/IStrategy.sol
 interface IStrategy {
@@ -75,8 +75,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
 
     // Satisfi
     address public oldSatisfiToken = 0xA1928c0D8F83C0bFB7ebE51B412b1FD29A277893;
-    // address public newSatisfiToken = 0xD3bb08Ca48AEC4FCe83F70120AD9e1Df81e17AD1;
-    address public newSatisfiToken = 0x8fda94079913CB921D065Ed9c004Afb43e1f900e; // test new
+    address public newSatisfiToken = 0x8fda94079913CB921D065Ed9c004Afb43e1f900e;
 
      // Dev address.
     address public devaddr;

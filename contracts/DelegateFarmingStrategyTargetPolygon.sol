@@ -1458,7 +1458,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     bool public isCAKEStaking; // only for staking CAKE using pancakeswap's native CAKE staking contract.
-    bool public isLazymintComp; // this vault is purely for staking. eg. WBNB-Lazymint staking vault.
+    bool public isCompound; // this vault is purely for staking. eg. WBNB-Lazymint staking vault.
 
     address public farmContractAddress; // address of farm, eg, PCS, Thugs etc.
     uint256 public pid; // pid of pool in farmContractAddress
@@ -1483,7 +1483,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     constructor(
         address _YetiMasterAddress,
         bool _isCAKEStaking,
-        bool _isLazymintComp,
+        bool _isCompound,
         address _farmContractAddress,
         uint256 _pid,
         address _wantAddress,
@@ -1494,10 +1494,10 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
         YetiMasterAddress = _YetiMasterAddress;
 
         isCAKEStaking = _isCAKEStaking;
-        isLazymintComp = _isLazymintComp;
+        isCompound = _isCompound;
         wantAddress = _wantAddress;
 
-        if (isLazymintComp) {
+        if (isCompound) {
             if (!isCAKEStaking) {
                 token0Address = IUniswapV2Pair(wantAddress).token0();
                 token1Address = IUniswapV2Pair(wantAddress).token1();
@@ -1524,7 +1524,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
             _wantAmt
         );
 
-        if (isLazymintComp) {
+        if (isCompound) {
             _farm(_wantAmt);
         } else {
             wantLockedTotal = wantLockedTotal.add(_wantAmt);
@@ -1552,7 +1552,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     {
         require(_wantAmt > 0, "_wantAmt <= 0");
 
-        if (isLazymintComp) {
+        if (isCompound) {
             if (isCAKEStaking) {
                 IPancakeswapFarm(farmContractAddress).leaveStaking(_wantAmt); // Just for CAKE staking, we dont use withdraw()
             } else {
@@ -1573,7 +1573,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
 
         IERC20(wantAddress).safeTransfer(YetiMasterAddress, _wantAmt);
         
-        if (isLazymintComp) {
+        if (isCompound) {
             distributeFee();
         }
 
@@ -1585,7 +1585,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     // 3. Deposits want tokens
 
     function earn() public whenNotPaused {
-        require(isLazymintComp, "!isLazymintComp");
+        require(isCompound, "!isCompound");
 
         // Harvest farm tokens
         if (isCAKEStaking) {
@@ -1598,7 +1598,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     }
     
     function distributeFee() internal {
-        require(isLazymintComp, "!isLazymintComp");
+        require(isCompound, "!isCompound");
         
         // Converts farm tokens into want tokens
         uint256 earnedAmt = IERC20(earnedAddress).balanceOf(address(this));
@@ -1628,13 +1628,47 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
         feeAddress = _feeAddress;
     }
 
+    function setEarnedAddress(address _earnedAddress) public {
+        require(msg.sender == govAddress, "!gov");
+        earnedAddress = _earnedAddress;
+    }
+
+    function setIsCompound(bool _isCompound) public {
+        require(msg.sender == govAddress, "!gov");
+        isCompound = _isCompound;
+    }
+
+    function setPid(bool _isCompound) public {
+        require(msg.sender == govAddress, "!gov");
+        isCompound = _isCompound;
+    }
+    
+    function retireStrat() public
+        onlyOwner
+        nonReentrant
+        returns (uint256) {
+        require(msg.sender == govAddress, "!gov");
+        IPancakeswapFarm(farmContractAddress).emergencyWithdraw(pid);
+        
+        uint256 balanceWant = IERC20(wantAddress).balanceOf(address(this));
+
+        if (wantLockedTotal >= balanceWant) {
+          wantLockedTotal = wantLockedTotal.sub(balanceWant);
+        } else {
+          wantLockedTotal = 0;
+        }
+
+        IERC20(wantAddress).safeTransfer(YetiMasterAddress, balanceWant);
+
+        return balanceWant;
+    }
+
     function inCaseTokensGetStuck(
         address _token,
         uint256 _amount,
         address _to
     ) public {
         require(msg.sender == govAddress, "!gov");
-        require(_token != earnedAddress, "!safe");
         require(_token != wantAddress, "!safe");
         IERC20(_token).safeTransfer(_to, _amount);
     }
