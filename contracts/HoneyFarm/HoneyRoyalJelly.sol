@@ -813,6 +813,12 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
     // The staked token
     IBEP20 public stakedToken;
 
+    // The capacity of staked token
+    uint256 public stakedTokenCapacity;
+    
+    // The amount of staked token
+    uint256 public totalStakedTokanAmount = 0;
+
     // The withdrawal interval
     uint256 public withdrawalInterval;
 
@@ -837,6 +843,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
     event RewardsStop(uint256 blockNumber);
     event Withdraw(address indexed user, uint256 amount);
     event NewWithdrawalInterval(uint256 interval);
+    event NewStakedTokenCapacity(uint256 amount);
 
     constructor() public {
         deployer = msg.sender;
@@ -859,6 +866,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         uint256 _rewardPerBlock,
         uint256 _startBlock,
         uint256 _bonusEndBlock,
+        uint256 _stakedTokenCapacity,
         uint256 _poolLimitPerUser,
         uint256 _withdrawalInterval,
         address _admin
@@ -876,6 +884,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         startBlock = _startBlock;
         bonusEndBlock = _bonusEndBlock;
         withdrawalInterval = _withdrawalInterval;
+        stakedTokenCapacity = _stakedTokenCapacity;
 
         if (_poolLimitPerUser > 0) {
             hasUserLimit = true;
@@ -903,6 +912,11 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
 
         if (hasUserLimit) {
             require(_amount.add(user.amount) <= poolLimitPerUser, "User amount above limit");
+        }
+        
+        totalStakedTokanAmount = totalStakedTokanAmount.add(_amount);
+        if (stakedTokenCapacity > 0) {
+            require(totalStakedTokanAmount <= stakedTokenCapacity, "The total amount of staked token cannot exceed the capacity");
         }
 
         _updatePool();
@@ -949,6 +963,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         if (_amount > 0) {
             user.amount = user.amount.sub(_amount);
             stakedToken.safeTransfer(address(msg.sender), _amount);
+            totalStakedTokanAmount = totalStakedTokanAmount.sub(_amount);
         }
 
         if (pending > 0) {
@@ -976,6 +991,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
 
         if (amountToTransfer > 0) {
             stakedToken.safeTransfer(address(msg.sender), amountToTransfer);
+            totalStakedTokanAmount = totalStakedTokanAmount.sub(amountToTransfer);
         }
 
         emit EmergencyWithdraw(msg.sender, user.amount);
@@ -1072,6 +1088,16 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         emit NewWithdrawalInterval(_interval);
     }
 
+    /*
+     * @notice Update the capacity of staked token
+     * @dev Only callable by owner.
+     * @param _amount: the capacity amount of staked token
+     */
+    function updateStakedTokenCapacity(uint256 _amount) external onlyOwner {
+        stakedTokenCapacity = _amount;
+        emit NewStakedTokenCapacity(_amount);
+    }
+    
     /*
      * @notice View function to see pending reward on frontend.
      * @param _user: user address
