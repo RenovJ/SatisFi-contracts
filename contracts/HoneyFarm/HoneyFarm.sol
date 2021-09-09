@@ -1230,7 +1230,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
     }
 
     // @TODO: Add HoneyToken address to here
-    address public constant earningToken = 0xc3EAE9b061Aa0e1B9BD3436080Dc57D2d63FEdc1;
+    address public constant earningToken = 0xE8c93310af068aa50bd7bF0ebFa459Df2a02ceba;
 
      // Dev address.
     address public devaddr;
@@ -1278,10 +1278,12 @@ contract YetiMaster is Ownable, ReentrancyGuard {
 
     constructor(
         address _devaddr,
+        address _feeAddr,
         uint256 _startBlock,
         uint256 _endBlock
     ) public {
         devaddr = _devaddr;
+        feeAddr = _feeAddr;
         startBlock = _startBlock;
         endBlock = _endBlock;
     }
