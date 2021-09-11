@@ -1620,9 +1620,9 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
         isCompound = _isCompound;
     }
 
-    function setPid(bool _isCompound) public {
+    function setPid(uint256 _pid) public {
         require(msg.sender == govAddress, "!gov");
-        isCompound = _isCompound;
+        pid = _pid;
     }
 
     function inCaseTokensGetStuck(
