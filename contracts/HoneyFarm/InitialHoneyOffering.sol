@@ -705,7 +705,8 @@ contract InitialHoneyOffering is ReentrancyGuard, Initializable {
   // Info of each user.
   struct UserInfo {
       uint256 amount;   // How many tokens the user has provided.
-      bool claimed;  // default false
+      uint256 claimedAmount;  // default 0
+      bool isRefunded;  // default false
   }
 
   // admin address
@@ -728,6 +729,10 @@ contract InitialHoneyOffering is ReentrancyGuard, Initializable {
   mapping (address => UserInfo) public userInfo;
   // participators
   address[] public addressList;
+  
+  // withdrawal lock
+  uint256[] public withdrawalLockIntervals = [1];
+  uint16[] public withdrawalLockRate = [100];
 
 
   event Deposit(address indexed user, uint256 amount);
@@ -785,21 +790,18 @@ contract InitialHoneyOffering is ReentrancyGuard, Initializable {
   function harvest() public nonReentrant {
     require (block.number > endBlock, 'not harvest time');
     require (userInfo[msg.sender].amount > 0, 'have you participated?');
-    require (!userInfo[msg.sender].claimed, 'nothing to harvest');
-    uint256 offeringTokenAmount = getOfferingAmount(msg.sender);
+//    require (!userInfo[msg.sender].claimedAmount, 'nothing to harvest');
+    uint256 offeringTokenAmount = getClaimableOfferingAmount(msg.sender);
     uint256 refundingTokenAmount = getRefundingAmount(msg.sender);
     if (offeringTokenAmount > 0) {
       offeringToken.safeTransfer(address(msg.sender), offeringTokenAmount);
+      userInfo[msg.sender].claimedAmount = userInfo[msg.sender].claimedAmount.add(offeringTokenAmount);
     }
     if (refundingTokenAmount > 0) {
       lpToken.safeTransfer(address(msg.sender), refundingTokenAmount);
+      userInfo[msg.sender].isRefunded = true;
     }
-    userInfo[msg.sender].claimed = true;
     emit Harvest(msg.sender, offeringTokenAmount, refundingTokenAmount);
-  }
-
-  function hasHarvest(address _user) external view returns(bool) {
-      return userInfo[_user].claimed;
   }
 
   // allocation 100000 means 0.1(10%), 1 meanss 0.000001(0.0001%), 1000000 means 1(100%)
@@ -807,16 +809,59 @@ contract InitialHoneyOffering is ReentrancyGuard, Initializable {
     return userInfo[_user].amount.mul(1e12).div(totalAmount).div(1e6);
   }
 
-  // get the amount of IHO token you will get
-  function getOfferingAmount(address _user) public view returns(uint256) {
+  // get the amount of IHO token user is able to get so far
+  function getClaimableOfferingAmount(address _user) public view returns(uint256) {
+    uint256 claimableRate = getClaimableRate();
+    if (claimableRate == 0)
+      return 0;
+    
+    uint256 totalOfferingAmount = 0;
     if (totalAmount > raisingAmount) {
       uint256 allocation = getUserAllocation(_user);
-      return offeringAmount.mul(allocation).div(1e6);
+      totalOfferingAmount = offeringAmount.mul(allocation).div(1e6);
     }
     else {
       // userInfo[_user] / (raisingAmount / offeringAmount)
-      return userInfo[_user].amount.mul(offeringAmount).div(raisingAmount);
+      totalOfferingAmount = userInfo[_user].amount.mul(offeringAmount).div(raisingAmount);
     }
+    uint256 totalClaimableOfferingAmount = totalOfferingAmount.mul(claimableRate).div(100);
+    return totalClaimableOfferingAmount.sub(userInfo[_user].claimedAmount);
+  }
+
+  // get the amount of IHO token locked for user
+  function getClaimLockedOfferingAmount(address _user) public view returns(uint256) {
+    uint256 claimableRate = getClaimableRate();
+    if (claimableRate == 0)
+      return 0;
+    
+    uint256 totalOfferingAmount = 0;
+    if (totalAmount > raisingAmount) {
+      uint256 allocation = getUserAllocation(_user);
+      totalOfferingAmount = offeringAmount.mul(allocation).div(1e6);
+    }
+    else {
+      // userInfo[_user] / (raisingAmount / offeringAmount)
+      totalOfferingAmount = userInfo[_user].amount.mul(offeringAmount).div(raisingAmount);
+    }
+    uint256 totalClaimLockedOfferingAmount = totalOfferingAmount.mul(100 - claimableRate).div(100);
+    return totalClaimLockedOfferingAmount.sub(userInfo[_user].claimedAmount);
+  }
+  
+  // return value 100 means 100%, 1 means 1%
+  function getClaimableRate() public view returns(uint256) {
+    if (block.number < endBlock) {
+        return 0;
+    }
+      
+    uint256 elapsedAfterEnd = block.number.sub(endBlock);
+    uint i = 0;
+    for (; i < withdrawalLockIntervals.length; i++) {
+      if (elapsedAfterEnd < withdrawalLockIntervals[i])
+        break;
+    }
+    if (i == 0)
+      return 0;
+    return withdrawalLockRate[i - 1];
   }
 
   // get the amount of lp token you will be refunded
@@ -824,6 +869,10 @@ contract InitialHoneyOffering is ReentrancyGuard, Initializable {
     if (totalAmount <= raisingAmount) {
       return 0;
     }
+    if (userInfo[_user].isRefunded) {
+      return 0;
+    }
+    
     uint256 allocation = getUserAllocation(_user);
     uint256 payAmount = raisingAmount.mul(allocation).div(1e6);
     return userInfo[_user].amount.sub(payAmount);
@@ -843,4 +892,17 @@ contract InitialHoneyOffering is ReentrancyGuard, Initializable {
       lpToken.safeTransfer(address(msg.sender), _lpAmount);
     }
   }
+    
+    function setWithdrawLock(uint256[] memory _withdrawalLockIntervals, uint16[] memory _withdrawalLockRate) public onlyAdmin {
+        require (_withdrawalLockIntervals.length == _withdrawalLockRate.length, 'setWithdrawLock: _withdrawalLockRate length is should be equal to _withdrawalLockIntervals length');
+        require (_withdrawalLockRate.length > 0, 'setWithdrawLock: _withdrawalLockRate length is one more than 0');
+        for (uint i = 0; i < _withdrawalLockIntervals.length - 1; i++) {
+            require (_withdrawalLockIntervals[i] < _withdrawalLockIntervals[i + 1], 'setWithdrawLock: The lock interval must be ascending');
+            require (_withdrawalLockRate[i] < _withdrawalLockRate[i + 1], 'setWithdrawLock: The lock rate must be ascending');
+        }
+        require (_withdrawalLockRate[_withdrawalLockRate.length - 1] == 100, 'setWithdrawLock: 100% Withdraw should be possible');
+        
+        withdrawalLockIntervals = _withdrawalLockIntervals;
+        withdrawalLockRate = _withdrawalLockRate;
+    }
 }
