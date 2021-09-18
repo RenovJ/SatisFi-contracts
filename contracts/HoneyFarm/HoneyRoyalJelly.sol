@@ -816,6 +816,9 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
     // The capacity of staked token
     uint256 public stakedTokenCapacity;
     
+    // The minimum amount of staked token
+    uint256 public minStakeAmount;
+    
     // The amount of staked token
     uint256 public totalStakedTokanAmount = 0;
 
@@ -824,6 +827,12 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
 
     // Max withdrawal interval: 30 days.
     uint256 public constant MAXIMUM_WITHDRAWAL_INTERVAL = 30 days;
+    
+    address public feeAddr;
+    uint16 public withdrawalFeeBP = 0;
+    uint256 public depositFeeAmount = 0;
+    uint16 public constant MAX_WITHDRAWAL_FEE_BP = 400;
+    uint16 public constant MAX_DEPOSIT_FEE_BP = 400;
 
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
@@ -844,6 +853,11 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
     event Withdraw(address indexed user, uint256 amount);
     event NewWithdrawalInterval(uint256 interval);
     event NewStakedTokenCapacity(uint256 amount);
+    event NewStakedTokenMinAmount(uint256 amount);
+    event SetFeeAddress(address indexed user, address indexed newAddress);
+    event SetDepositFeeAmount(uint256 depositFeeAmount);
+    event SetWithdrawFeeBP(uint16 withdrawalFeeBP);
+    
 
     constructor() public {
         deployer = msg.sender;
@@ -866,9 +880,13 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         uint256 _rewardPerBlock,
         uint256 _startBlock,
         uint256 _bonusEndBlock,
-        uint256 _stakedTokenCapacity,
         uint256 _poolLimitPerUser,
         uint256 _withdrawalInterval,
+        uint256 _stakedTokenCapacity,
+        uint256 _minStakeAmount,
+        uint16 _withdrawalFeeBP,
+        uint256 _depositFeeAmount,
+        address _feeAddr,
         address _admin
     ) external {
         require(!isInitialized, "Already initialized");
@@ -883,8 +901,11 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         rewardPerBlock = _rewardPerBlock;
         startBlock = _startBlock;
         bonusEndBlock = _bonusEndBlock;
-        withdrawalInterval = _withdrawalInterval;
         stakedTokenCapacity = _stakedTokenCapacity;
+        minStakeAmount = _minStakeAmount;
+        withdrawalInterval = _withdrawalInterval;
+        withdrawalFeeBP = _withdrawalFeeBP;
+        depositFeeAmount = _depositFeeAmount;
 
         if (_poolLimitPerUser > 0) {
             hasUserLimit = true;
@@ -901,6 +922,8 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
 
         // Transfer ownership to the admin address who becomes owner of the contract
         transferOwnership(_admin);
+        
+        feeAddr = _feeAddr;
     }
 
     /*
@@ -918,6 +941,9 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         if (stakedTokenCapacity > 0) {
             require(totalStakedTokanAmount <= stakedTokenCapacity, "The total amount of staked token cannot exceed the capacity");
         }
+        if (minStakeAmount > 0) {
+            require(_amount >= minStakeAmount, "The deposit amount of staked token must exceed the minimum amount");
+        }
 
         _updatePool();
 
@@ -930,11 +956,14 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         }
 
         if (_amount > 0) {
+            if (depositFeeAmount > 0) {
+                _amount = _amount.sub(depositFeeAmount);
+                stakedToken.safeTransferFrom(address(msg.sender), address(feeAddr), depositFeeAmount);
+            }
             uint256 wantBalBefore = IBEP20(stakedToken).balanceOf(address(this));
             stakedToken.safeTransferFrom(address(msg.sender), address(this), _amount);
             uint256 wantBalAfter = IBEP20(stakedToken).balanceOf(address(this));
             _amount = wantBalAfter.sub(wantBalBefore);
-            
             user.amount = user.amount.add(_amount);
 
             if (user.nextWithdrawalUntil == 0) {
@@ -961,6 +990,12 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         uint256 pending = user.amount.mul(accTokenPerShare).div(PRECISION_FACTOR).sub(user.rewardDebt);
 
         if (_amount > 0) {
+            if (block.number < bonusEndBlock && withdrawalFeeBP > 0) {
+                uint256 withdrawalFee = _amount.mul(withdrawalFeeBP).div(10000);
+                user.amount = user.amount.sub(withdrawalFee);
+                _amount = _amount.sub(withdrawalFee);
+                stakedToken.safeTransfer(address(feeAddr), withdrawalFee);
+            }
             user.amount = user.amount.sub(_amount);
             stakedToken.safeTransfer(address(msg.sender), _amount);
             totalStakedTokanAmount = totalStakedTokanAmount.sub(_amount);
@@ -1096,6 +1131,32 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
     function updateStakedTokenCapacity(uint256 _amount) external onlyOwner {
         stakedTokenCapacity = _amount;
         emit NewStakedTokenCapacity(_amount);
+    }
+
+    /*
+     * @notice Update the minimum amount of staked token
+     * @dev Only callable by owner.
+     * @param _amount: the minimum amount of staked token
+     */
+    function updateStakedTokenMinAmount(uint256 _amount) external onlyOwner {
+        minStakeAmount = _amount;
+        emit NewStakedTokenMinAmount(_amount);
+    }
+
+    function setFeeAddress(address _feeAddress) public onlyOwner {
+        feeAddr = _feeAddress;
+        emit SetFeeAddress(msg.sender, _feeAddress);
+    }
+    
+    function setDepositFee(uint256 _depositFeeAmount) external onlyOwner {
+        depositFeeAmount = _depositFeeAmount;
+        emit SetDepositFeeAmount(_depositFeeAmount);
+    }
+    
+    function setWithdrawFee(uint16 _withdrawalFeeBP) external onlyOwner {
+        require (_withdrawalFeeBP <= MAX_WITHDRAWAL_FEE_BP, 'setWithdrawFee: invalid deposit fee basis points');
+        withdrawalFeeBP = _withdrawalFeeBP;
+        emit SetWithdrawFeeBP(_withdrawalFeeBP);
     }
     
     /*
