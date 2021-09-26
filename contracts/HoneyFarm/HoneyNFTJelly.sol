@@ -1126,9 +1126,6 @@ contract HoneyNFTJelly is Ownable, ReentrancyGuard, VRFConsumerBase {
     // Info of each user that stakes tokens (stakedToken)
     mapping(address => UserInfo) public userInfo;
     address[] public userList;
-    
-    // Winner to get NFT as a reward
-    address public winner;
 
     struct UserInfo {
         uint256 amount; // How many staked tokens the user has provided
@@ -1156,7 +1153,6 @@ contract HoneyNFTJelly is Ownable, ReentrancyGuard, VRFConsumerBase {
     event SetFeeAddress(address indexed user, address indexed newAddress);
     event SetDepositFeeAmount(uint256 depositFeeAmount);
     event SetWithdrawFeeBP(uint16 withdrawalFeeBP);
-    event NewWinner(address indexed user);
     
     constructor() public
         VRFConsumerBase(
@@ -1471,15 +1467,17 @@ contract HoneyNFTJelly is Ownable, ReentrancyGuard, VRFConsumerBase {
     function pendingReward(address _user) public view returns (uint256) {
         UserInfo storage user = userInfo[_user];
         uint256 stakedTokenSupply = stakedToken.balanceOf(address(this));
+        uint256 reward = 0;
         if (block.number > lastRewardBlock && stakedTokenSupply != 0) {
             uint256 multiplier = _getMultiplier(lastRewardBlock, block.number);
             uint256 cakeReward = multiplier.mul(rewardPerBlock);
             uint256 adjustedTokenPerShare =
             accTokenPerShare.add(cakeReward.mul(PRECISION_FACTOR).div(stakedTokenSupply));
-            return user.amount.mul(adjustedTokenPerShare).div(PRECISION_FACTOR).sub(user.rewardDebt);
+            reward = user.amount.mul(adjustedTokenPerShare).div(PRECISION_FACTOR).sub(user.rewardDebt);
         } else {
-            return user.amount.mul(accTokenPerShare).div(PRECISION_FACTOR).sub(user.rewardDebt);
+            reward = user.amount.mul(accTokenPerShare).div(PRECISION_FACTOR).sub(user.rewardDebt);
         }
+        return reward.add(user.totalShareAmount);
     }
 
     // View function to see if user can withdraw staked token.
@@ -1528,19 +1526,22 @@ contract HoneyNFTJelly is Ownable, ReentrancyGuard, VRFConsumerBase {
         require(block.number > bonusEndBlock, "finalize: Staking is not finished yet");
         require(LINK.balanceOf(address(this)) >= vrfFee, "Not enough LINK - fill contract with faucet");
         requestRandomness(vrfKeyHash, vrfFee);
-        
+    }
+    
+    function winner() external view returns (address) {
+        if (vrfRandomResult == 0) {
+            return address(0);
+        }
         uint256 totalShareAmount = bonusEndBlock.sub(startBlock).mul(rewardPerBlock);
         uint256 rewardSharePoint = vrfRandomResult.mod(totalShareAmount);
         uint256 accShareAmount = 0;
         for (uint i = 0; i < userList.length; i++) {
-            uint256 share = userInfo[userList[i]].totalShareAmount.add( pendingReward(userList[i]) );
+            uint256 share = pendingReward(userList[i]);
             if (rewardSharePoint < accShareAmount.add(share)) {
-                winner = userList[i];
-                break;
+                return userList[i];
             }
             accShareAmount = accShareAmount.add(share);
         }
-        emit NewWinner(winner);
     }
 
     /**
