@@ -951,7 +951,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
             uint256 pending = user.amount.mul(accTokenPerShare).div(PRECISION_FACTOR).sub(user.rewardDebt);
             if (pending > 0) {
                 rewardToken.safeTransfer(address(msg.sender), pending);
-                user.nextWithdrawalUntil = block.timestamp.add(withdrawalInterval);
+                user.nextWithdrawalUntil = block.number.add(withdrawalInterval);
             }
         }
 
@@ -967,7 +967,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
             user.amount = user.amount.add(_amount);
 
             if (user.nextWithdrawalUntil == 0) {
-                user.nextWithdrawalUntil = block.timestamp.add(withdrawalInterval);
+                user.nextWithdrawalUntil = block.number.add(withdrawalInterval);
             }
         }
 
@@ -983,14 +983,14 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
     function withdraw(uint256 _amount) external nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
         require(user.amount >= _amount, "Amount to withdraw too high");
-        require(user.nextWithdrawalUntil <= block.timestamp, "Withdrawal locked");
+        //require(user.nextWithdrawalUntil <= block.number, "Withdrawal locked");
 
         _updatePool();
 
         uint256 pending = user.amount.mul(accTokenPerShare).div(PRECISION_FACTOR).sub(user.rewardDebt);
 
         if (_amount > 0) {
-            if (block.number < bonusEndBlock && withdrawalFeeBP > 0) {
+            if (getWithdrawalFeeBP(msg.sender) > 0) {
                 uint256 withdrawalFee = _amount.mul(withdrawalFeeBP).div(10000);
                 user.amount = user.amount.sub(withdrawalFee);
                 _amount = _amount.sub(withdrawalFee);
@@ -1003,7 +1003,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
 
         if (pending > 0) {
             rewardToken.safeTransfer(address(msg.sender), pending);
-            user.nextWithdrawalUntil = block.timestamp.add(withdrawalInterval);
+            //user.nextWithdrawalUntil = block.number.add(withdrawalInterval);
         }
 
         user.rewardDebt = user.amount.mul(accTokenPerShare).div(PRECISION_FACTOR);
@@ -1017,7 +1017,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
      */
     function emergencyWithdraw() external nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
-        require(user.nextWithdrawalUntil <= block.timestamp, "Withdrawal locked");
+        require(user.nextWithdrawalUntil <= block.number, "Withdrawal locked");
 
         uint256 amountToTransfer = user.amount;
         user.amount = 0;
@@ -1025,6 +1025,11 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
         user.nextWithdrawalUntil = 0;
 
         if (amountToTransfer > 0) {
+            if (getWithdrawalFeeBP(msg.sender) > 0) {
+                uint256 withdrawalFee = amountToTransfer.mul(withdrawalFeeBP).div(10000);
+                amountToTransfer = amountToTransfer.sub(withdrawalFee);
+                stakedToken.safeTransfer(address(feeAddr), withdrawalFee);
+            }
             stakedToken.safeTransfer(address(msg.sender), amountToTransfer);
             totalStakedTokanAmount = totalStakedTokanAmount.sub(amountToTransfer);
         }
@@ -1181,7 +1186,7 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
     // View function to see if user can withdraw staked token.
     function canWithdraw(address _user) external view returns (bool) {
         UserInfo storage user = userInfo[_user];
-        return block.timestamp >= user.nextWithdrawalUntil;
+        return block.number >= user.nextWithdrawalUntil;
     }
 
     /*
@@ -1219,4 +1224,14 @@ contract HoneyRoyalJelly is Ownable, ReentrancyGuard {
             return bonusEndBlock.sub(_from);
         }
     }
+    
+    function getWithdrawalFeeBP(address _user) public view returns (uint256) {
+        UserInfo storage user = userInfo[_user];
+        if (block.number < user.nextWithdrawalUntil &&
+            block.number < bonusEndBlock) {
+            return withdrawalFeeBP;
+        }
+        return 0;
+    }
+    
 }
